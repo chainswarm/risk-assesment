@@ -1,0 +1,32 @@
+{
+    "ethereum-daily-sot-ingestion": {
+        "task": "packages.jobs.tasks.sot_ingestion_task.sot_ingestion_task",
+        "schedule": "0 1 * * *",
+        "args": ["ethereum", 195]
+    },
+    "bitcoin-daily-sot-ingestion": {
+        "task": "packages.jobs.tasks.sot_ingestion_task.sot_ingestion_task",
+        "schedule": "15 1 * * *",
+        "args": ["bitcoin", 195]
+    },
+    "torus-daily-sot-ingestion": {
+        "task": "packages.jobs.tasks.sot_ingestion_task.sot_ingestion_task",
+        "schedule": "30 1 * * *",
+        "args": ["torus", 195]
+    },
+    "ethereum-retry-sot-ingestion": {
+        "task": "packages.jobs.tasks.sot_ingestion_task.sot_ingestion_task",
+        "schedule": "0 3 * * *",
+        "args": ["ethereum", 195]
+    },
+    "bitcoin-retry-sot-ingestion": {
+        "task": "packages.jobs.tasks.sot_ingestion_task.sot_ingestion_task",
+        "schedule": "15 3 * * *",
+        "args": ["bitcoin", 195]
+    },
+    "torus-retry-sot-ingestion": {
+        "task": "packages.jobs.tasks.sot_ingestion_task.sot_ingestion_task",
+        "schedule": "30 3 * * *",
+        "args": ["torus", 195]
+    }
+}

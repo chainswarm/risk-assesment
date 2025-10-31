@@ -12,7 +12,7 @@ from loguru import logger
 def get_connection_params(network: str) -> dict:
     connection_params = {
         "host": os.getenv(f"CLICKHOUSE_HOST", "localhost"),
-        "port": os.getenv(f"CLICKHOUSE_PORT", "8323"),
+        "port": os.getenv(f"CLICKHOUSE_PORT", "8123"),
         "database": os.getenv(f"CLICKHOUSE_DATABASE",  f"risk_assessment_{network.lower()}"),
         "user": os.getenv(f"CLICKHOUSE_USER", "default"),
         "password": os.getenv(f"CLICKHOUSE_PASSWORD", 'validator'),
@@ -96,7 +96,6 @@ class ClientFactory:
                 'async_insert': 0,
                 'wait_for_async_insert': 1,
                 'max_execution_time': 300,
-                'max_query_size': 100000
             }
 
         )
@@ -126,16 +125,13 @@ class MigrateSchema:
 
     def run_migrations(self):
         schemas = [
-            "raw_alerts.sql",
-            "raw_features.sql",
-            "raw_clusters.sql",
-            "raw_money_flows.sql",
+            "feature_evolution_tracking.sql",
+            "miner_submission.sql",
+            "miner_validation_result.sql",
+
             "raw_address_labels.sql",
-            "alert_scores.sql",
-            "alert_rankings.sql",
-            "cluster_scores.sql",
-            "batch_metadata.sql",
-            "trained_models.sql",
+            "raw_clusters.sql",
+            "raw_features.sql"
         ]
         
         for schema_file in schemas:

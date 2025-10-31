@@ -1,0 +1,32 @@
+{
+    "torus-daily-prices": {
+        "task": "packages.jobs.tasks.price_service_job.price_service_task",
+        "schedule": "0 0 * * *",
+        "args": ["torus", ["coingecko"]]
+    },
+    "torus-daily-analytics-pipeline-7d": {
+        "task": "packages.jobs.celery_app.run_analytics_pipeline",
+        "schedule": "30 1 * * *",
+        "args": ["torus", 7, false, 100.0]
+    },
+    "torus-daily-analytics-pipeline-30d": {
+        "task": "packages.jobs.celery_app.run_analytics_pipeline",
+        "schedule": "30 4 * * *",
+        "args": ["torus", 30, false, 100.0]
+    },
+    "bittensor-daily-prices": {
+        "task": "packages.jobs.tasks.price_service_job.price_service_task",
+        "schedule": "5 0 * * *",
+        "args": ["bittensor"]
+    },
+    "bittensor-daily-analytics-pipeline-7d": {
+        "task": "packages.jobs.celery_app.run_analytics_pipeline",
+        "schedule": "0 2 * * *",
+        "args": ["bittensor", 7, false, 100.0]
+    },
+    "bittensor-daily-analytics-pipeline-30d": {
+        "task": "packages.jobs.celery_app.run_analytics_pipeline",
+        "schedule": "0 3 * * *",
+        "args": ["bittensor", 30, false, 100.0]
+    }
+}

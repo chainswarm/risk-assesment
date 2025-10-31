@@ -3,7 +3,7 @@ import argparse
 from datetime import datetime
 from loguru import logger
 from packages.storage import ClientFactory, get_connection_params
-from packages.validation import IntegrityValidator, BehavioralValidator, GroundTruthValidator
+from packages.validation import IntegrityValidator, BehavioralValidator, GroundTruthValidator, EvolutionValidator
 
 
 def validate_miner(
@@ -32,14 +32,32 @@ def validate_miner(
         miner_id, processing_date, window_days
     )
     
-    partial_final_score = (
-        tier1_results['tier1_integrity_score'] * 0.2 +
-        tier2_results['tier2_behavior_score'] * 0.3
+    tier3b_validator = EvolutionValidator(client_factory)
+    tier3b_results = tier3b_validator.validate(
+        miner_id, processing_date, window_days
     )
     
+    tier1_contribution = tier1_results['tier1_integrity_score'] * 0.2
+    tier2_contribution = tier2_results['tier2_behavior_score'] * 0.3
+    
+    tier3_contribution = 0.0
     if tier3a_results['tier3_gt_score'] is not None:
-        gt_contribution = tier3a_results['tier3_gt_score'] * tier3a_results['tier3_gt_coverage'] * 0.5
-        partial_final_score += gt_contribution
+        tier3_contribution += tier3a_results['tier3_gt_score'] * tier3a_results['tier3_gt_coverage']
+    
+    if tier3b_results['tier3_evolution_score'] is not None:
+        tier3_contribution += tier3b_results['tier3_evolution_score'] * tier3b_results['tier3_evolution_coverage']
+    
+    tier3_contribution *= 0.5
+    
+    final_score = tier1_contribution + tier2_contribution + tier3_contribution
+    
+    validation_status = 'complete'
+    if tier3a_results['tier3_gt_score'] is None and tier3b_results['tier3_evolution_score'] is None:
+        validation_status = 'no_tier3'
+    elif tier3a_results['tier3_gt_score'] is None:
+        validation_status = 'tier3b_only'
+    elif tier3b_results['tier3_evolution_score'] is None:
+        validation_status = 'tier3a_only'
     
     with client_factory.client_context() as client:
         data = {
@@ -49,25 +67,31 @@ def validate_miner(
             **tier1_results,
             **tier2_results,
             **tier3a_results,
-            'tier3_evolution_score': None,
-            'tier3_evolution_auc': None,
-            'tier3_evolution_pattern_accuracy': None,
-            'tier3_evolution_coverage': None,
-            'final_score': partial_final_score,
-            'validation_status': 'partial_tier3a',
+            **tier3b_results,
+            'final_score': final_score,
+            'validation_status': validation_status,
             'validated_at': datetime.utcnow()
         }
         
         client.insert('miner_validation_results', [data], column_names=list(data.keys()))
     
     logger.info(f"Validation complete for miner {miner_id}")
-    logger.info(f"Tier 1 (Integrity): {tier1_results['tier1_integrity_score']:.4f}")
-    logger.info(f"Tier 2 (Behavioral): {tier2_results['tier2_behavior_score']:.4f}")
+    logger.info(f"Tier 1 (Integrity): {tier1_results['tier1_integrity_score']:.4f} (weight: 20%)")
+    logger.info(f"Tier 2 (Behavioral): {tier2_results['tier2_behavior_score']:.4f} (weight: 30%)")
+    
     if tier3a_results['tier3_gt_score'] is not None:
         logger.info(f"Tier 3A (Ground Truth): {tier3a_results['tier3_gt_score']:.4f} (coverage: {tier3a_results['tier3_gt_coverage']:.2%})")
     else:
         logger.info("Tier 3A (Ground Truth): No labeled data")
-    logger.info(f"Partial Final Score: {partial_final_score:.4f}")
+    
+    if tier3b_results['tier3_evolution_score'] is not None:
+        logger.info(f"Tier 3B (Evolution): {tier3b_results['tier3_evolution_score']:.4f} (coverage: {tier3b_results['tier3_evolution_coverage']:.2%})")
+        logger.info(f"  - AUC: {tier3b_results['tier3_evolution_auc']:.4f}")
+        logger.info(f"  - Pattern Accuracy: {tier3b_results['tier3_evolution_pattern_accuracy']:.4f}")
+    else:
+        logger.info("Tier 3B (Evolution): No evolution data")
+    
+    logger.info(f"Final Score: {final_score:.4f} (status: {validation_status})")
 
 
 if __name__ == "__main__":

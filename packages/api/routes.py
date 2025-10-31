@@ -204,3 +204,41 @@ async def get_miner_rankings(
             })
         
         return rankings
+
+
+@router.get("/miners/list")
+async def list_miners(
+    network: str = Query(..., description="Network identifier")
+):
+    connection_params = get_connection_params(network)
+    factory = ClientFactory(connection_params)
+    
+    with factory.client_context() as client:
+        query = """
+            SELECT
+                miner_id,
+                MAX(processing_date) as latest_date,
+                argMax(final_score, processing_date) as latest_score,
+                argMax(validation_status, processing_date) as latest_status,
+                argMax(validated_at, processing_date) as latest_validated_at
+            FROM miner_validation_results
+            GROUP BY miner_id
+            ORDER BY latest_score DESC
+        """
+        
+        result = client.query(query)
+        
+        if not result.result_rows:
+            return []
+        
+        miners = []
+        for row in result.result_rows:
+            miners.append({
+                "miner_id": row[0],
+                "latest_processing_date": str(row[1]),
+                "latest_score": float(row[2]),
+                "validation_status": row[3],
+                "validated_at": row[4]
+            })
+        
+        return miners
