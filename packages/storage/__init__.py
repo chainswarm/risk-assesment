@@ -12,12 +12,11 @@ from loguru import logger
 def get_connection_params(network: str) -> dict:
     connection_params = {
         "host": os.getenv(f"CLICKHOUSE_HOST", "localhost"),
-        "port": os.getenv(f"CLICKHOUSE_PORT", "8123"),
-        "database": os.getenv(f"CLICKHOUSE_DATABASE",  f"risk_scoring_{network.lower()}"),
+        "port": os.getenv(f"CLICKHOUSE_PORT", "8323"),
+        "database": os.getenv(f"CLICKHOUSE_DATABASE",  f"risk_assesment_{network.lower()}"),
         "user": os.getenv(f"CLICKHOUSE_USER", "default"),
-        "password": os.getenv(f"CLICKHOUSE_PASSWORD", 'miner'),
-        "max_execution_time": os.getenv("CLICKHOUSE_MAX_EXECUTION_TIME", "1800"),
-        "max_query_size": os.getenv("CLICKHOUSE_MAX_QUERY_SIZE", "5000000")
+        "password": os.getenv(f"CLICKHOUSE_PASSWORD", 'validator'),
+        "max_execution_time": os.getenv("CLICKHOUSE_MAX_EXECUTION_TIME", "1800")
     }
     return connection_params
 

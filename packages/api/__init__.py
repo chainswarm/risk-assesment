@@ -1,8 +1,8 @@
 """
-Miner API Package
+Risk Assessment API Package
 
-FastAPI server that exposes pre-computed risk scores to validators.
-Supports multi-network deployment (minimum 1 network).
+FastAPI server for multi-miner risk assessment and validation.
+Supports multi-network deployment.
 """
 
 __version__ = "1.0.0"

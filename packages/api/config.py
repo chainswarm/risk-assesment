@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     
     cors_origins: List[str] = ["*"]
     
-    github_url: str = "https://github.com/your-org/risk-scoring"
+    github_url: str = "https://github.com/your-org/risk-assessment"
     commit_hash: str = "unknown"
     
     class Config:

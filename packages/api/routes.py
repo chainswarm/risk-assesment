@@ -1,236 +1,213 @@
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, HTTPException, Query
+from loguru import logger
 from datetime import datetime
+from typing import List
 
-from packages.api.models import *
-from packages.api import database as db
-from packages.api.config import settings
+from .models import MinerSubmission, BatchSubmission, ValidationScore
 from packages.storage import get_connection_params, ClientFactory
 
-router = APIRouter()
+router = APIRouter(prefix="/api/v1", tags=["assessment"])
 
 
-@router.get("/health", response_model=HealthResponse)
-async def health_check():
-    return HealthResponse(
-        status="healthy",
-        timestamp=datetime.utcnow(),
-        version=settings.api_version,
-        database_connected=True
-    )
-
-
-@router.get("/version", response_model=VersionResponse)
-async def get_version(network: str = Query(..., description="Network identifier")):
+@router.post("/submissions")
+async def submit_scores(
+    batch: BatchSubmission,
+    network: str = Query(..., description="Network identifier")
+):
+    if not batch.submissions:
+        raise HTTPException(status_code=400, detail="No submissions provided")
+    
+    miner_id = batch.submissions[0].miner_id
+    processing_date = batch.submissions[0].processing_date
+    
+    logger.info(f"Receiving submission from miner {miner_id} for {network} on {processing_date}")
+    
     connection_params = get_connection_params(network)
     factory = ClientFactory(connection_params)
     
     with factory.client_context() as client:
-        latest_date = db.get_latest_date(client)
-        if not latest_date:
-            raise HTTPException(404, f"No data available for network: {network}")
+        data = []
+        for sub in batch.submissions:
+            data.append({
+                'submission_id': sub.submission_id,
+                'miner_id': sub.miner_id,
+                'network': sub.network,
+                'processing_date': sub.processing_date,
+                'window_days': sub.window_days,
+                'alert_id': sub.alert_id,
+                'score': sub.score,
+                'model_version': sub.model_version,
+                'model_github_url': sub.model_github_url,
+                'submission_timestamp': datetime.utcnow(),
+                'score_metadata': sub.score_metadata or ''
+            })
         
-        metadata = db.get_batch_metadata(client, latest_date)
-        if not metadata:
-            raise HTTPException(404, f"No metadata available for network: {network}")
+        client.insert('miner_submissions', data, column_names=list(data[0].keys()))
         
-        return VersionResponse(
-            api_version=settings.api_version,
-            models={
-                "alert_scorer": metadata.get('model_versions_alert_scorer', 'unknown'),
-                "alert_ranker": metadata.get('model_versions_alert_ranker', 'unknown'),
-                "cluster_scorer": metadata.get('model_versions_cluster_scorer', 'unknown')
-            },
-            network=network,
-            github_url=settings.github_url,
-            commit_hash=settings.commit_hash
-        )
-
-
-@router.get("/dates/available", response_model=DatesAvailableResponse)
-async def get_available_dates(network: str = Query(..., description="Network identifier")):
-    connection_params = get_connection_params(network)
-    factory = ClientFactory(connection_params)
+        logger.info(f"Stored {len(data)} submissions from miner {miner_id}")
     
-    with factory.client_context() as client:
-        dates = db.get_available_dates(client)
-        return DatesAvailableResponse(dates=dates, total_count=len(dates))
+    return {
+        "status": "success",
+        "miner_id": miner_id,
+        "network": network,
+        "processing_date": processing_date,
+        "submissions_count": len(batch.submissions)
+    }
 
 
-@router.get("/dates/latest", response_model=LatestDateResponse)
-async def get_latest_date(network: str = Query(..., description="Network identifier")):
-    connection_params = get_connection_params(network)
-    factory = ClientFactory(connection_params)
-    
-    with factory.client_context() as client:
-        latest_date = db.get_latest_date(client)
-        if not latest_date:
-            raise HTTPException(404, f"No data available for network: {network}")
-        
-        metadata = db.get_batch_metadata(client, latest_date)
-        if not metadata:
-            raise HTTPException(404, f"No metadata available for date: {latest_date}")
-        
-        return LatestDateResponse(
-            latest_date=latest_date,
-            processed_at=metadata.get('created_at', datetime.utcnow())
-        )
-
-
-@router.get("/scores/alerts/latest", response_model=AlertScoresResponse)
-async def get_latest_alert_scores(network: str = Query(..., description="Network identifier")):
-    connection_params = get_connection_params(network)
-    factory = ClientFactory(connection_params)
-    
-    with factory.client_context() as client:
-        latest_date = db.get_latest_date(client)
-        if not latest_date:
-            raise HTTPException(404, f"No data available for network: {network}")
-        return _get_alert_scores_impl(client, latest_date)
-
-
-@router.get("/scores/alerts/{processing_date}", response_model=AlertScoresResponse)
-async def get_alert_scores(
-    processing_date: str = Path(..., description="Processing date (YYYY-MM-DD)"),
+@router.get("/submissions/{miner_id}/latest")
+async def get_latest_submission(
+    miner_id: str,
     network: str = Query(..., description="Network identifier")
 ):
     connection_params = get_connection_params(network)
     factory = ClientFactory(connection_params)
     
     with factory.client_context() as client:
-        return _get_alert_scores_impl(client, processing_date)
-
-
-def _get_alert_scores_impl(client, processing_date: str) -> AlertScoresResponse:
-    scores = db.get_alert_scores(client, processing_date)
-    metadata = db.get_batch_metadata(client, processing_date)
-    
-    if not metadata:
-        return AlertScoresResponse(
-            processing_date=processing_date,
-            model_version='unknown',
-            total_alerts=0,
-            scores=[],
-            metadata=AlertScoresMetadata(
-                processed_at=datetime.utcnow(),
-                total_latency_ms=0,
-                avg_latency_ms=0
+        query = """
+            SELECT 
+                processing_date,
+                window_days,
+                COUNT(*) as submission_count,
+                model_version,
+                model_github_url,
+                MAX(submission_timestamp) as latest_timestamp
+            FROM miner_submissions
+            WHERE miner_id = {miner_id:String}
+              AND network = {network:String}
+            GROUP BY processing_date, window_days, model_version, model_github_url
+            ORDER BY processing_date DESC, latest_timestamp DESC
+            LIMIT 1
+        """
+        
+        result = client.query(query, parameters={
+            'miner_id': miner_id,
+            'network': network
+        })
+        
+        if not result.result_rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No submissions found for miner {miner_id} on network {network}"
             )
-        )
-    
-    total_latency = metadata.get('latencies_ms_total', 0)
-    avg_latency = total_latency / len(scores) if scores else 0
-    
-    return AlertScoresResponse(
-        processing_date=processing_date,
-        model_version=metadata.get('model_versions_alert_scorer', 'unknown'),
-        total_alerts=len(scores),
-        scores=[AlertScore(**s) for s in scores],
-        metadata=AlertScoresMetadata(
-            processed_at=metadata.get('created_at', datetime.utcnow()),
-            total_latency_ms=total_latency,
-            avg_latency_ms=avg_latency
-        )
-    )
+        
+        row = result.result_rows[0]
+        return {
+            "miner_id": miner_id,
+            "network": network,
+            "processing_date": str(row[0]),
+            "window_days": row[1],
+            "submission_count": row[2],
+            "model_version": row[3],
+            "model_github_url": row[4],
+            "latest_timestamp": row[5]
+        }
 
 
-@router.get("/rankings/alerts/latest", response_model=AlertRankingsResponse)
-async def get_latest_alert_rankings(network: str = Query(..., description="Network identifier")):
-    connection_params = get_connection_params(network)
-    factory = ClientFactory(connection_params)
-    
-    with factory.client_context() as client:
-        latest_date = db.get_latest_date(client)
-        if not latest_date:
-            raise HTTPException(404, f"No data available for network: {network}")
-        return _get_alert_rankings_impl(client, latest_date)
-
-
-@router.get("/rankings/alerts/{processing_date}", response_model=AlertRankingsResponse)
-async def get_alert_rankings(
-    processing_date: str = Path(..., description="Processing date (YYYY-MM-DD)"),
+@router.get("/scores/{miner_id}/latest")
+async def get_latest_validation_score(
+    miner_id: str,
     network: str = Query(..., description="Network identifier")
 ):
     connection_params = get_connection_params(network)
     factory = ClientFactory(connection_params)
     
     with factory.client_context() as client:
-        return _get_alert_rankings_impl(client, processing_date)
-
-
-def _get_alert_rankings_impl(client, processing_date: str) -> AlertRankingsResponse:
-    rankings = db.get_alert_rankings(client, processing_date)
-    metadata = db.get_batch_metadata(client, processing_date)
-    
-    if not metadata:
-        return AlertRankingsResponse(
-            processing_date=processing_date,
-            model_version='unknown',
-            total_alerts=0,
-            rankings=[],
-            metadata=AlertRankingsMetadata(processed_at=datetime.utcnow())
-        )
-    
-    return AlertRankingsResponse(
-        processing_date=processing_date,
-        model_version=metadata.get('model_versions_alert_ranker', 'unknown'),
-        total_alerts=len(rankings),
-        rankings=[AlertRanking(**r) for r in rankings],
-        metadata=AlertRankingsMetadata(processed_at=metadata.get('created_at', datetime.utcnow()))
-    )
-
-
-@router.get("/scores/clusters/latest", response_model=ClusterScoresResponse)
-async def get_latest_cluster_scores(network: str = Query(..., description="Network identifier")):
-    connection_params = get_connection_params(network)
-    factory = ClientFactory(connection_params)
-    
-    with factory.client_context() as client:
-        latest_date = db.get_latest_date(client)
-        if not latest_date:
-            raise HTTPException(404, f"No data available for network: {network}")
-        return _get_cluster_scores_impl(client, latest_date)
-
-
-@router.get("/scores/clusters/{processing_date}", response_model=ClusterScoresResponse)
-async def get_cluster_scores(
-    processing_date: str = Path(..., description="Processing date (YYYY-MM-DD)"),
-    network: str = Query(..., description="Network identifier")
-):
-    connection_params = get_connection_params(network)
-    factory = ClientFactory(connection_params)
-    
-    with factory.client_context() as client:
-        return _get_cluster_scores_impl(client, processing_date)
-
-
-def _get_cluster_scores_impl(client, processing_date: str) -> ClusterScoresResponse:
-    scores = db.get_cluster_scores(client, processing_date)
-    metadata = db.get_batch_metadata(client, processing_date)
-    
-    if not metadata:
-        return ClusterScoresResponse(
-            processing_date=processing_date,
-            model_version='unknown',
-            total_clusters=0,
-            scores=[],
-            metadata=ClusterScoresMetadata(
-                processed_at=datetime.utcnow(),
-                total_latency_ms=0,
-                avg_latency_ms=0
+        query = """
+            SELECT 
+                processing_date,
+                window_days,
+                tier1_integrity_score,
+                tier2_behavior_score,
+                tier3_gt_score,
+                tier3_evolution_score,
+                final_score,
+                validation_status,
+                validated_at
+            FROM miner_validation_results
+            WHERE miner_id = {miner_id:String}
+              AND network = {network:String}
+            ORDER BY processing_date DESC, validated_at DESC
+            LIMIT 1
+        """
+        
+        result = client.query(query, parameters={
+            'miner_id': miner_id,
+            'network': network
+        })
+        
+        if not result.result_rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No validation results found for miner {miner_id} on network {network}"
             )
-        )
+        
+        row = result.result_rows[0]
+        return {
+            "miner_id": miner_id,
+            "network": network,
+            "processing_date": str(row[0]),
+            "window_days": row[1],
+            "tier1_integrity_score": float(row[2]) if row[2] is not None else None,
+            "tier2_behavior_score": float(row[3]) if row[3] is not None else None,
+            "tier3_gt_score": float(row[4]) if row[4] is not None else None,
+            "tier3_evolution_score": float(row[5]) if row[5] is not None else None,
+            "final_score": float(row[6]),
+            "validation_status": row[7],
+            "validated_at": row[8]
+        }
+
+
+@router.get("/scores/rankings")
+async def get_miner_rankings(
+    network: str = Query(..., description="Network identifier"),
+    processing_date: str = Query(..., description="Processing date (YYYY-MM-DD)"),
+    window_days: int = Query(195, description="Window size in days"),
+    limit: int = Query(100, description="Maximum number of results")
+):
+    connection_params = get_connection_params(network)
+    factory = ClientFactory(connection_params)
     
-    total_latency = metadata.get('latencies_ms_cluster_scoring', 0)
-    avg_latency = total_latency / len(scores) if scores else 0
-    
-    return ClusterScoresResponse(
-        processing_date=processing_date,
-        model_version=metadata.get('model_versions_cluster_scorer', 'unknown'),
-        total_clusters=len(scores),
-        scores=[ClusterScore(**s) for s in scores],
-        metadata=ClusterScoresMetadata(
-            processed_at=metadata.get('created_at', datetime.utcnow()),
-            total_latency_ms=total_latency,
-            avg_latency_ms=avg_latency
-        )
-    )
+    with factory.client_context() as client:
+        query = """
+            SELECT 
+                miner_id,
+                final_score,
+                tier1_integrity_score,
+                tier2_behavior_score,
+                tier3_gt_score,
+                tier3_evolution_score,
+                validation_status
+            FROM miner_validation_results
+            WHERE network = {network:String}
+              AND processing_date = {processing_date:Date}
+              AND window_days = {window_days:UInt32}
+              AND validation_status = 'completed'
+            ORDER BY final_score DESC
+            LIMIT {limit:UInt32}
+        """
+        
+        result = client.query(query, parameters={
+            'network': network,
+            'processing_date': processing_date,
+            'window_days': window_days,
+            'limit': limit
+        })
+        
+        if not result.result_rows:
+            return []
+        
+        rankings = []
+        for idx, row in enumerate(result.result_rows, 1):
+            rankings.append({
+                "rank": idx,
+                "miner_id": row[0],
+                "final_score": float(row[1]),
+                "tier1_integrity_score": float(row[2]) if row[2] is not None else None,
+                "tier2_behavior_score": float(row[3]) if row[3] is not None else None,
+                "tier3_gt_score": float(row[4]) if row[4] is not None else None,
+                "tier3_evolution_score": float(row[5]) if row[5] is not None else None,
+                "validation_status": row[6]
+            })
+        
+        return rankings

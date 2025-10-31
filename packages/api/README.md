@@ -1,6 +1,6 @@
-# Miner API
+# Risk Assessment API
 
-FastAPI server that exposes pre-computed risk scores to validators.
+FastAPI server for multi-miner risk assessment and validation.
 
 ## Quick Start
 
@@ -31,7 +31,7 @@ API_HOST=0.0.0.0
 API_PORT=8000
 
 # Repository
-GITHUB_URL=https://github.com/your-org/risk-scoring
+GITHUB_URL=https://github.com/your-org/risk-assessment
 COMMIT_HASH=$(git rev-parse HEAD)
 ```
 
@@ -45,36 +45,25 @@ Example networks: `torus`, `bitcoin`, `ethereum`
 
 All endpoints require `network` query parameter.
 
-### Info
-- `GET /health` - Health check (no network required)
-- `GET /version?network=torus` - API and model versions
-
-### Dates
-- `GET /dates/available?network=torus` - Available processing dates
-- `GET /dates/latest?network=torus` - Latest processing date
-
-### Scores
-- `GET /scores/alerts/latest?network=torus` - Latest alert scores
-- `GET /scores/alerts/{processing_date}?network=torus` - Alert scores for date
-- `GET /rankings/alerts/latest?network=torus` - Latest alert rankings  
-- `GET /rankings/alerts/{processing_date}?network=torus` - Alert rankings for date
-- `GET /scores/clusters/latest?network=torus` - Latest cluster scores
-- `GET /scores/clusters/{processing_date}?network=torus` - Cluster scores for date
+### Miner Submissions
+- `POST /api/v1/submissions` - Submit miner scores for validation
+- `GET /api/v1/submissions/{miner_id}/latest` - Get latest submission from a miner
+- `GET /api/v1/scores/{miner_id}/latest` - Get latest validation scores for a miner
+- `GET /api/v1/scores/rankings` - Get ranked list of miners by final score
 
 ## Testing
 
 ```bash
-# Health check
-curl http://localhost:8000/health
+# Submit miner scores
+curl -X POST "http://localhost:8000/api/v1/submissions?network=torus" \
+  -H "Content-Type: application/json" \
+  -d @submission.json
 
-# Get latest scores for torus network
-curl "http://localhost:8000/scores/alerts/latest?network=torus"
+# Get latest validation scores
+curl "http://localhost:8000/api/v1/scores/miner_123/latest?network=torus"
 
-# Get scores for specific date
-curl "http://localhost:8000/scores/alerts/2025-10-30?network=torus"
-
-# Test different network
-curl "http://localhost:8000/scores/alerts/latest?network=bitcoin"
+# Get miner rankings
+curl "http://localhost:8000/api/v1/scores/rankings?network=torus&processing_date=2025-10-31&window_days=195"
 ```
 
 ## API Documentation
@@ -88,4 +77,4 @@ Interactive API docs available at:
 1. Network parameter in query determines which database to connect to
 2. `get_connection_params(network)` returns connection config for that network
 3. `ClientFactory` creates connection to the appropriate ClickHouse database
-4. API serves pre-computed scores from that database
+4. API serves miner submissions and validation results from that database
