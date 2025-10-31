@@ -6,7 +6,6 @@ from datetime import datetime
 class MinerSubmission(BaseModel):
     submission_id: str
     miner_id: str
-    network: str
     processing_date: str
     window_days: int
     alert_id: str
@@ -22,7 +21,6 @@ class BatchSubmission(BaseModel):
 
 class ValidationScore(BaseModel):
     miner_id: str
-    network: str
     processing_date: str
     window_days: int
     tier1_integrity_score: float

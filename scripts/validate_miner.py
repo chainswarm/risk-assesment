@@ -19,18 +19,17 @@ def validate_miner(
     
     tier1_validator = IntegrityValidator(client_factory)
     tier1_results = tier1_validator.validate(
-        miner_id, network, processing_date, window_days
+        miner_id, processing_date, window_days
     )
     
     tier2_validator = BehavioralValidator(client_factory)
     tier2_results = tier2_validator.validate(
-        miner_id, network, processing_date, window_days
+        miner_id, processing_date, window_days
     )
     
     with client_factory.client_context() as client:
         data = {
             'miner_id': miner_id,
-            'network': network,
             'processing_date': processing_date,
             'window_days': window_days,
             **tier1_results,
@@ -43,7 +42,7 @@ def validate_miner(
             'tier3_evolution_auc': None,
             'tier3_evolution_pattern_accuracy': None,
             'tier3_evolution_coverage': None,
-            'final_score': tier1_results['tier1_integrity_score'] * 0.2 + 
+            'final_score': tier1_results['tier1_integrity_score'] * 0.2 +
                           tier2_results['tier2_behavior_score'] * 0.3,
             'validation_status': 'partial',
             'validated_at': datetime.utcnow()

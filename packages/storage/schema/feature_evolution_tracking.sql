@@ -1,7 +1,6 @@
 CREATE TABLE IF NOT EXISTS feature_evolution_tracking (
     alert_id String,
     address String,
-    network String,
     base_date Date,
     snapshot_date Date,
     window_days UInt16,
@@ -18,5 +17,5 @@ CREATE TABLE IF NOT EXISTS feature_evolution_tracking (
     
     tracked_at DateTime64(3)
 ) ENGINE = MergeTree()
-ORDER BY (network, base_date, alert_id, snapshot_date)
+ORDER BY (base_date, alert_id, snapshot_date)
 SETTINGS index_granularity = 8192;

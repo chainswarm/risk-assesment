@@ -13,7 +13,6 @@ class BehavioralValidator:
     def validate(
         self,
         miner_id: str,
-        network: str,
         processing_date: str,
         window_days: int
     ) -> Dict[str, float]:
@@ -22,15 +21,15 @@ class BehavioralValidator:
         
         with self.client_factory.client_context() as client:
             distribution_entropy = self._check_distribution_entropy(
-                client, miner_id, network, processing_date, window_days
+                client, miner_id, processing_date, window_days
             )
             
             rank_correlation = self._check_rank_correlation(
-                client, miner_id, network, processing_date, window_days
+                client, miner_id, processing_date, window_days
             )
             
             consistency_score = self._check_consistency(
-                client, miner_id, network, processing_date, window_days
+                client, miner_id, processing_date, window_days
             )
         
         behavior_score = (
@@ -49,7 +48,7 @@ class BehavioralValidator:
         }
     
     def _check_distribution_entropy(
-        self, client, miner_id: str, network: str,
+        self, client, miner_id: str,
         processing_date: str, window_days: int
     ) -> float:
         
@@ -57,14 +56,12 @@ class BehavioralValidator:
             SELECT score
             FROM miner_submissions
             WHERE miner_id = %(miner_id)s
-              AND network = %(network)s
               AND processing_date = %(processing_date)s
               AND window_days = %(window_days)s
         """
         
         result = client.query(query, parameters={
             'miner_id': miner_id,
-            'network': network,
             'processing_date': processing_date,
             'window_days': window_days
         })
@@ -86,7 +83,7 @@ class BehavioralValidator:
         return normalized_entropy
     
     def _check_rank_correlation(
-        self, client, miner_id: str, network: str,
+        self, client, miner_id: str,
         processing_date: str, window_days: int
     ) -> float:
         
@@ -94,7 +91,6 @@ class BehavioralValidator:
             SELECT alert_id, score
             FROM miner_submissions
             WHERE miner_id = %(miner_id)s
-              AND network = %(network)s
               AND processing_date = %(processing_date)s
               AND window_days = %(window_days)s
             ORDER BY alert_id
@@ -102,7 +98,6 @@ class BehavioralValidator:
         
         miner_result = client.query(miner_query, parameters={
             'miner_id': miner_id,
-            'network': network,
             'processing_date': processing_date,
             'window_days': window_days
         })
@@ -116,8 +111,7 @@ class BehavioralValidator:
         consensus_query = """
             SELECT alert_id, median(score) as median_score
             FROM miner_submissions
-            WHERE network = %(network)s
-              AND processing_date = %(processing_date)s
+            WHERE processing_date = %(processing_date)s
               AND window_days = %(window_days)s
               AND alert_id IN %(alert_ids)s
             GROUP BY alert_id
@@ -125,7 +119,6 @@ class BehavioralValidator:
         """
         
         consensus_result = client.query(consensus_query, parameters={
-            'network': network,
             'processing_date': processing_date,
             'window_days': window_days,
             'alert_ids': alert_ids
@@ -154,7 +147,7 @@ class BehavioralValidator:
         return normalized_correlation
     
     def _check_consistency(
-        self, client, miner_id: str, network: str,
+        self, client, miner_id: str,
         processing_date: str, window_days: int
     ) -> float:
         
@@ -162,7 +155,6 @@ class BehavioralValidator:
             SELECT processing_date, COUNT(*) as count
             FROM miner_submissions
             WHERE miner_id = %(miner_id)s
-              AND network = %(network)s
               AND window_days = %(window_days)s
               AND processing_date < %(processing_date)s
             GROUP BY processing_date
@@ -172,7 +164,6 @@ class BehavioralValidator:
         
         history_result = client.query(history_query, parameters={
             'miner_id': miner_id,
-            'network': network,
             'processing_date': processing_date,
             'window_days': window_days
         })
@@ -186,7 +177,6 @@ class BehavioralValidator:
             SELECT alert_id, score
             FROM miner_submissions
             WHERE miner_id = %(miner_id)s
-              AND network = %(network)s
               AND processing_date = %(processing_date)s
               AND window_days = %(window_days)s
         """
@@ -195,21 +185,18 @@ class BehavioralValidator:
             SELECT alert_id, score
             FROM miner_submissions
             WHERE miner_id = %(miner_id)s
-              AND network = %(network)s
               AND processing_date = %(prev_date)s
               AND window_days = %(window_days)s
         """
         
         current_result = client.query(current_query, parameters={
             'miner_id': miner_id,
-            'network': network,
             'processing_date': processing_date,
             'window_days': window_days
         })
         
         prev_result = client.query(prev_query, parameters={
             'miner_id': miner_id,
-            'network': network,
             'prev_date': prev_date,
             'window_days': window_days
         })

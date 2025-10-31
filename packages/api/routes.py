@@ -31,7 +31,6 @@ async def submit_scores(
             data.append({
                 'submission_id': sub.submission_id,
                 'miner_id': sub.miner_id,
-                'network': sub.network,
                 'processing_date': sub.processing_date,
                 'window_days': sub.window_days,
                 'alert_id': sub.alert_id,
@@ -65,7 +64,7 @@ async def get_latest_submission(
     
     with factory.client_context() as client:
         query = """
-            SELECT 
+            SELECT
                 processing_date,
                 window_days,
                 COUNT(*) as submission_count,
@@ -74,15 +73,13 @@ async def get_latest_submission(
                 MAX(submission_timestamp) as latest_timestamp
             FROM miner_submissions
             WHERE miner_id = {miner_id:String}
-              AND network = {network:String}
             GROUP BY processing_date, window_days, model_version, model_github_url
             ORDER BY processing_date DESC, latest_timestamp DESC
             LIMIT 1
         """
         
         result = client.query(query, parameters={
-            'miner_id': miner_id,
-            'network': network
+            'miner_id': miner_id
         })
         
         if not result.result_rows:
@@ -114,7 +111,7 @@ async def get_latest_validation_score(
     
     with factory.client_context() as client:
         query = """
-            SELECT 
+            SELECT
                 processing_date,
                 window_days,
                 tier1_integrity_score,
@@ -126,14 +123,12 @@ async def get_latest_validation_score(
                 validated_at
             FROM miner_validation_results
             WHERE miner_id = {miner_id:String}
-              AND network = {network:String}
             ORDER BY processing_date DESC, validated_at DESC
             LIMIT 1
         """
         
         result = client.query(query, parameters={
-            'miner_id': miner_id,
-            'network': network
+            'miner_id': miner_id
         })
         
         if not result.result_rows:
@@ -170,7 +165,7 @@ async def get_miner_rankings(
     
     with factory.client_context() as client:
         query = """
-            SELECT 
+            SELECT
                 miner_id,
                 final_score,
                 tier1_integrity_score,
@@ -179,8 +174,7 @@ async def get_miner_rankings(
                 tier3_evolution_score,
                 validation_status
             FROM miner_validation_results
-            WHERE network = {network:String}
-              AND processing_date = {processing_date:Date}
+            WHERE processing_date = {processing_date:Date}
               AND window_days = {window_days:UInt32}
               AND validation_status = 'completed'
             ORDER BY final_score DESC
@@ -188,7 +182,6 @@ async def get_miner_rankings(
         """
         
         result = client.query(query, parameters={
-            'network': network,
             'processing_date': processing_date,
             'window_days': window_days,
             'limit': limit
