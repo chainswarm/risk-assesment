@@ -1,0 +1,32 @@
+{
+  "tier1_integrity": {
+    "enabled": true,
+    "is_gate": true,
+    "weight": 0.0
+  },
+  "tier2_behavioral": {
+    "enabled": true,
+    "is_gate": false,
+    "weight": 0.1,
+    "minimum_score": 0.5,
+    "flat_reward": 0.1
+  },
+  "tier3_accuracy": {
+    "enabled": true,
+    "is_gate": false,
+    "weight": 0.9,
+    "tier3a_ground_truth": {
+      "weight": 0.1,
+      "coverage_weight": 0.5
+    },
+    "tier3b_evolution": {
+      "weight": 0.8,
+      "coverage_weight": 0.5,
+      "required_days": 30
+    }
+  },
+  "reward_schedule": {
+    "flat_period_days": 29,
+    "flat_reward": 0.1
+  }
+}

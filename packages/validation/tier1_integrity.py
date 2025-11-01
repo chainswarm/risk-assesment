@@ -10,28 +10,28 @@ class IntegrityValidator:
     
     def validate(
         self,
-        miner_id: str,
+        submitter_id: str,
         processing_date: str,
         window_days: int
     ) -> Dict[str, float]:
         
-        logger.info(f"Running Tier 1 integrity validation for miner {miner_id}")
+        logger.info(f"Running Tier 1 integrity validation for miner {submitter_id}")
         
         with self.client_factory.client_context() as client:
             has_all_alerts = self._check_completeness(
-                client, miner_id, processing_date, window_days
+                client, submitter_id, processing_date, window_days
             )
             
             score_range_valid = self._check_score_range(
-                client, miner_id, processing_date, window_days
+                client, submitter_id, processing_date, window_days
             )
             
             no_duplicates = self._check_duplicates(
-                client, miner_id, processing_date, window_days
+                client, submitter_id, processing_date, window_days
             )
             
             metadata_valid = self._check_metadata(
-                client, miner_id, processing_date, window_days
+                client, submitter_id, processing_date, window_days
             )
         
         integrity_score = (
@@ -41,7 +41,7 @@ class IntegrityValidator:
             metadata_valid * 0.25
         )
         
-        logger.info(f"Tier 1 score for miner {miner_id}: {integrity_score:.4f}")
+        logger.info(f"Tier 1 score for miner {submitter_id}: {integrity_score:.4f}")
         
         return {
             'tier1_integrity_score': integrity_score,
@@ -52,7 +52,7 @@ class IntegrityValidator:
         }
     
     def _check_completeness(
-        self, client, miner_id: str,
+        self, client, submitter_id: str,
         processing_date: str, window_days: int
     ) -> float:
         
@@ -74,14 +74,14 @@ class IntegrityValidator:
         
         miner_alerts_query = """
             SELECT COUNT(DISTINCT alert_id)
-            FROM miner_submissions
-            WHERE miner_id = %(miner_id)s
+            FROM submissions
+            WHERE submitter_id = %(submitter_id)s
               AND processing_date = %(processing_date)s
               AND window_days = %(window_days)s
         """
         
         miner_result = client.query(miner_alerts_query, parameters={
-            'miner_id': miner_id,
+            'submitter_id': submitter_id,
             'processing_date': processing_date,
             'window_days': window_days
         })
@@ -92,7 +92,7 @@ class IntegrityValidator:
         return min(coverage, 1.0)
     
     def _check_score_range(
-        self, client, miner_id: str,
+        self, client, submitter_id: str,
         processing_date: str, window_days: int
     ) -> float:
         
@@ -100,14 +100,14 @@ class IntegrityValidator:
             SELECT
                 COUNT(*) as total,
                 SUM(CASE WHEN score < 0 OR score > 1 THEN 1 ELSE 0 END) as invalid
-            FROM miner_submissions
-            WHERE miner_id = %(miner_id)s
+            FROM submissions
+            WHERE submitter_id = %(submitter_id)s
               AND processing_date = %(processing_date)s
               AND window_days = %(window_days)s
         """
         
         result = client.query(query, parameters={
-            'miner_id': miner_id,
+            'submitter_id': submitter_id,
             'processing_date': processing_date,
             'window_days': window_days
         })
@@ -120,7 +120,7 @@ class IntegrityValidator:
         return 1.0 - (invalid / total)
     
     def _check_duplicates(
-        self, client, miner_id: str,
+        self, client, submitter_id: str,
         processing_date: str, window_days: int
     ) -> float:
         
@@ -128,14 +128,14 @@ class IntegrityValidator:
             SELECT
                 COUNT(*) as total,
                 COUNT(DISTINCT alert_id) as unique_alerts
-            FROM miner_submissions
-            WHERE miner_id = %(miner_id)s
+            FROM submissions
+            WHERE submitter_id = %(submitter_id)s
               AND processing_date = %(processing_date)s
               AND window_days = %(window_days)s
         """
         
         result = client.query(query, parameters={
-            'miner_id': miner_id,
+            'submitter_id': submitter_id,
             'processing_date': processing_date,
             'window_days': window_days
         })
@@ -151,7 +151,7 @@ class IntegrityValidator:
         return unique / total
     
     def _check_metadata(
-        self, client, miner_id: str,
+        self, client, submitter_id: str,
         processing_date: str, window_days: int
     ) -> float:
         
@@ -162,14 +162,14 @@ class IntegrityValidator:
                     WHEN model_version = '' OR model_github_url = ''
                     THEN 1 ELSE 0
                 END) as invalid
-            FROM miner_submissions
-            WHERE miner_id = %(miner_id)s
+            FROM submissions
+            WHERE submitter_id = %(submitter_id)s
               AND processing_date = %(processing_date)s
               AND window_days = %(window_days)s
         """
         
         result = client.query(query, parameters={
-            'miner_id': miner_id,
+            'submitter_id': submitter_id,
             'processing_date': processing_date,
             'window_days': window_days
         })

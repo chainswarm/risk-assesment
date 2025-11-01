@@ -128,6 +128,7 @@ class MigrateSchema:
             "feature_evolution_tracking.sql",
             "miner_submission.sql",
             "miner_validation_result.sql",
+            "alert_validation_details.sql",
 
             "raw_address_labels.sql",
             "raw_clusters.sql",

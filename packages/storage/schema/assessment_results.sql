@@ -1,5 +1,5 @@
-CREATE TABLE IF NOT EXISTS miner_validation_results (
-    miner_id String,
+CREATE TABLE IF NOT EXISTS assessment_results (
+    submitter_id String,
     processing_date Date,
     window_days UInt16,
     
@@ -29,5 +29,5 @@ CREATE TABLE IF NOT EXISTS miner_validation_results (
     
     validated_at DateTime64(3)
 ) ENGINE = MergeTree()
-ORDER BY (processing_date, window_days, miner_id)
+ORDER BY (processing_date, window_days, submitter_id)
 SETTINGS index_granularity = 8192;

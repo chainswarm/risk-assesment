@@ -12,9 +12,10 @@ def create_assessment_tables(network: str):
     schema_dir = Path(__file__).parent.parent / "packages" / "storage" / "schema"
     
     tables = [
-        "miner_submissions",
+        "submissions",
         "feature_evolution_tracking",
-        "miner_validation_results"
+        "assessment_results",
+        "alert_validation_details"
     ]
     
     connection_params = get_connection_params(network)

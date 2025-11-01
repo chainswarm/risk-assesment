@@ -12,56 +12,62 @@ class BehavioralValidator:
     
     def validate(
         self,
-        miner_id: str,
+        submitter_id: str,
         processing_date: str,
         window_days: int
     ) -> Dict[str, float]:
         
-        logger.info(f"Running Tier 2 behavioral validation for miner {miner_id}")
+        logger.info(f"Running Tier 2 behavioral validation for miner {submitter_id}")
         
         with self.client_factory.client_context() as client:
             distribution_entropy = self._check_distribution_entropy(
-                client, miner_id, processing_date, window_days
+                client, submitter_id, processing_date, window_days
             )
             
             rank_correlation = self._check_rank_correlation(
-                client, miner_id, processing_date, window_days
+                client, submitter_id, processing_date, window_days
             )
             
             consistency_score = self._check_consistency(
-                client, miner_id, processing_date, window_days
+                client, submitter_id, processing_date, window_days
+            )
+            
+            address_consistency = self._check_address_consistency(
+                client, submitter_id, processing_date, window_days
             )
         
         behavior_score = (
-            distribution_entropy * 0.33 +
-            rank_correlation * 0.33 +
-            consistency_score * 0.34
+            distribution_entropy * 0.25 +
+            rank_correlation * 0.25 +
+            consistency_score * 0.25 +
+            address_consistency * 0.25
         )
         
-        logger.info(f"Tier 2 score for miner {miner_id}: {behavior_score:.4f}")
+        logger.info(f"Tier 2 score for miner {submitter_id}: {behavior_score:.4f}")
         
         return {
             'tier2_behavior_score': behavior_score,
             'tier2_distribution_entropy': distribution_entropy,
             'tier2_rank_correlation': rank_correlation,
-            'tier2_consistency_score': consistency_score
+            'tier2_consistency_score': consistency_score,
+            'tier2_address_consistency': address_consistency
         }
     
     def _check_distribution_entropy(
-        self, client, miner_id: str,
+        self, client, submitter_id: str,
         processing_date: str, window_days: int
     ) -> float:
         
         query = """
             SELECT score
-            FROM miner_submissions
-            WHERE miner_id = %(miner_id)s
-              AND processing_date = %(processing_date)s
-              AND window_days = %(window_days)s
+            FROM submissions
+            WHERE submitter_id = {submitter_id:String}
+              AND processing_date = {processing_date:Date}
+              AND window_days = {window_days:UInt32}
         """
         
         result = client.query(query, parameters={
-            'miner_id': miner_id,
+            'submitter_id': submitter_id,
             'processing_date': processing_date,
             'window_days': window_days
         })
@@ -83,21 +89,21 @@ class BehavioralValidator:
         return normalized_entropy
     
     def _check_rank_correlation(
-        self, client, miner_id: str,
+        self, client, submitter_id: str,
         processing_date: str, window_days: int
     ) -> float:
         
         miner_query = """
             SELECT alert_id, score
-            FROM miner_submissions
-            WHERE miner_id = %(miner_id)s
-              AND processing_date = %(processing_date)s
-              AND window_days = %(window_days)s
+            FROM submissions
+            WHERE submitter_id = {submitter_id:String}
+              AND processing_date = {processing_date:Date}
+              AND window_days = {window_days:UInt32}
             ORDER BY alert_id
         """
         
         miner_result = client.query(miner_query, parameters={
-            'miner_id': miner_id,
+            'submitter_id': submitter_id,
             'processing_date': processing_date,
             'window_days': window_days
         })
@@ -110,10 +116,10 @@ class BehavioralValidator:
         
         consensus_query = """
             SELECT alert_id, median(score) as median_score
-            FROM miner_submissions
-            WHERE processing_date = %(processing_date)s
-              AND window_days = %(window_days)s
-              AND alert_id IN %(alert_ids)s
+            FROM submissions
+            WHERE processing_date = {processing_date:Date}
+              AND window_days = {window_days:UInt32}
+              AND alert_id IN {alert_ids:Array(String)}
             GROUP BY alert_id
             ORDER BY alert_id
         """
@@ -147,23 +153,23 @@ class BehavioralValidator:
         return normalized_correlation
     
     def _check_consistency(
-        self, client, miner_id: str,
+        self, client, submitter_id: str,
         processing_date: str, window_days: int
     ) -> float:
         
         history_query = """
             SELECT processing_date, COUNT(*) as count
-            FROM miner_submissions
-            WHERE miner_id = %(miner_id)s
-              AND window_days = %(window_days)s
-              AND processing_date < %(processing_date)s
+            FROM submissions
+            WHERE submitter_id = {submitter_id:String}
+              AND window_days = {window_days:UInt32}
+              AND processing_date < {processing_date:Date}
             GROUP BY processing_date
             ORDER BY processing_date DESC
             LIMIT 1
         """
         
         history_result = client.query(history_query, parameters={
-            'miner_id': miner_id,
+            'submitter_id': submitter_id,
             'processing_date': processing_date,
             'window_days': window_days
         })
@@ -175,28 +181,28 @@ class BehavioralValidator:
         
         current_query = """
             SELECT alert_id, score
-            FROM miner_submissions
-            WHERE miner_id = %(miner_id)s
-              AND processing_date = %(processing_date)s
-              AND window_days = %(window_days)s
+            FROM submissions
+            WHERE submitter_id = {submitter_id:String}
+              AND processing_date = {processing_date:Date}
+              AND window_days = {window_days:UInt32}
         """
         
         prev_query = """
             SELECT alert_id, score
-            FROM miner_submissions
-            WHERE miner_id = %(miner_id)s
-              AND processing_date = %(prev_date)s
-              AND window_days = %(window_days)s
+            FROM submissions
+            WHERE submitter_id = {submitter_id:String}
+              AND processing_date = {prev_date:Date}
+              AND window_days = {window_days:UInt32}
         """
         
         current_result = client.query(current_query, parameters={
-            'miner_id': miner_id,
+            'submitter_id': submitter_id,
             'processing_date': processing_date,
             'window_days': window_days
         })
         
         prev_result = client.query(prev_query, parameters={
-            'miner_id': miner_id,
+            'submitter_id': submitter_id,
             'prev_date': prev_date,
             'window_days': window_days
         })
@@ -219,3 +225,62 @@ class BehavioralValidator:
         consistency = 1.0 - min(mean_diff, 1.0)
         
         return consistency
+    
+    def _check_address_consistency(
+        self, client, submitter_id: str,
+        processing_date: str, window_days: int
+    ) -> float:
+        query = """
+            SELECT 
+                ra.address,
+                ms.score
+            FROM submissions ms
+            INNER JOIN raw_alerts ra
+                ON ms.alert_id = ra.alert_id
+                AND ms.processing_date = ra.processing_date
+                AND ms.window_days = ra.window_days
+            WHERE ms.submitter_id = {submitter_id:String}
+              AND ms.processing_date = {processing_date:Date}
+              AND ms.window_days = {window_days:UInt32}
+        """
+        
+        result = client.query(query, parameters={
+            'submitter_id': submitter_id,
+            'processing_date': processing_date,
+            'window_days': window_days
+        })
+        
+        if not result.result_rows:
+            return 0.0
+        
+        address_scores = {}
+        for row in result.result_rows:
+            address, score = row
+            if address not in address_scores:
+                address_scores[address] = []
+            address_scores[address].append(float(score))
+        
+        penalties = []
+        for address, scores in address_scores.items():
+            if len(scores) > 1:
+                std_dev = np.std(scores)
+                penalty = self._calculate_consistency_penalty(std_dev)
+                penalties.append(penalty)
+        
+        if not penalties:
+            return 1.0
+        
+        avg_penalty = np.mean(penalties)
+        consistency_score = 1.0 + avg_penalty
+        
+        return max(0.0, consistency_score)
+    
+    def _calculate_consistency_penalty(self, std_dev: float) -> float:
+        if std_dev < 0.10:
+            return 0.0
+        elif std_dev < 0.15:
+            return -0.05
+        elif std_dev < 0.25:
+            return -0.10
+        else:
+            return -0.15

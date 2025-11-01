@@ -12,20 +12,20 @@ class GroundTruthValidator:
     
     def validate(
         self,
-        miner_id: str,
+        submitter_id: str,
         processing_date: str,
         window_days: int
     ) -> Dict[str, float]:
         
-        logger.info(f"Running Tier 3A ground truth validation for miner {miner_id}")
+        logger.info(f"Running Tier 3A ground truth validation for miner {submitter_id}")
         
         with self.client_factory.client_context() as client:
             scores_and_labels = self._get_scores_with_labels(
-                client, miner_id, processing_date, window_days
+                client, submitter_id, processing_date, window_days
             )
             
             if not scores_and_labels:
-                logger.warning(f"No labeled data for miner {miner_id}")
+                logger.warning(f"No labeled data for miner {submitter_id}")
                 return {
                     'tier3_gt_score': None,
                     'tier3_gt_auc': None,
@@ -46,7 +46,7 @@ class GroundTruthValidator:
             coverage = labeled_count / total_alerts if total_alerts > 0 else 0.0
             
             logger.info(
-                f"Tier 3A for miner {miner_id}: "
+                f"Tier 3A for miner {submitter_id}: "
                 f"AUC={auc:.4f}, Brier={brier:.4f}, Coverage={coverage:.2%}"
             )
             
@@ -58,19 +58,19 @@ class GroundTruthValidator:
             }
     
     def _get_scores_with_labels(
-        self, client, miner_id: str, processing_date: str, window_days: int
+        self, client, submitter_id: str, processing_date: str, window_days: int
     ) -> Dict:
         
         total_query = """
             SELECT COUNT(DISTINCT alert_id)
-            FROM miner_submissions
-            WHERE miner_id = %(miner_id)s
+            FROM submissions
+            WHERE submitter_id = %(submitter_id)s
               AND processing_date = %(processing_date)s
               AND window_days = %(window_days)s
         """
         
         total_result = client.query(total_query, parameters={
-            'miner_id': miner_id,
+            'submitter_id': submitter_id,
             'processing_date': processing_date,
             'window_days': window_days
         })
@@ -82,7 +82,7 @@ class GroundTruthValidator:
                 ms.alert_id,
                 ms.score,
                 al.risk_level
-            FROM miner_submissions ms
+            FROM submissions ms
             INNER JOIN raw_alerts ra 
                 ON ms.alert_id = ra.alert_id 
                 AND ms.processing_date = ra.processing_date
@@ -91,14 +91,14 @@ class GroundTruthValidator:
                 ON ra.address = al.address
                 AND ra.processing_date = al.processing_date
                 AND ra.window_days = al.window_days
-            WHERE ms.miner_id = %(miner_id)s
+            WHERE ms.submitter_id = %(submitter_id)s
               AND ms.processing_date = %(processing_date)s
               AND ms.window_days = %(window_days)s
               AND al.risk_level IN ('low', 'medium', 'high', 'critical')
         """
         
         result = client.query(query, parameters={
-            'miner_id': miner_id,
+            'submitter_id': submitter_id,
             'processing_date': processing_date,
             'window_days': window_days
         })

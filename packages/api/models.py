@@ -3,9 +3,9 @@ from typing import List, Optional
 from datetime import datetime
 
 
-class MinerSubmission(BaseModel):
+class SubmitterSubmission(BaseModel):
     submission_id: str
-    miner_id: str
+    submitter_id: str
     processing_date: str
     window_days: int
     alert_id: str
@@ -16,11 +16,11 @@ class MinerSubmission(BaseModel):
 
 
 class BatchSubmission(BaseModel):
-    submissions: List[MinerSubmission]
+    submissions: List[SubmitterSubmission]
 
 
 class ValidationScore(BaseModel):
-    miner_id: str
+    submitter_id: str
     processing_date: str
     window_days: int
     tier1_integrity_score: float
